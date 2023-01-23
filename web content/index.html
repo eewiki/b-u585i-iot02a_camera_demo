@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B-U585I-IOT02A Demo</title>
+    <link href="favicon.ico" rel="icon" type="image/x-icon">
+    <link href="master.css" rel="stylesheet" type="text/css">
+    <style>
+
+    </style>
+</head>
+<body>
+    <header>
+        <div class="row">
+            <img src="images/DKE_Logo.png" alt="" height="130px">
+            <div class="fill">B-U585I-IOT02A Demo </div>
+            <img src="images/ST_Logo.png" alt="" height="130px">
+        </div>
+    </header>
+    <div class="row">
+        <div class="side">
+            <figure>
+                <img src="images/MB1379_front_side.png" alt="">
+            </figure>
+        </div>
+        <div class="main">
+            <figure id="live_stream">
+                <h1>Live Stream from MB1379</h1>
+                <img id="stream" src="" alt="" width="640" height="480" style="background-color: white;">
+                <form>
+                    <button class="button-red" id="toggle_stream" style="min-width: 140px;">Start Stream</button>
+                </form>
+            </figure>
+        </div>    
+        <div class="main">
+            <figure id="tof_map">
+                <h1>8x8 Depth Map from VL53L5CX</h1>
+                <canvas id="tof_canvas" width="480" height="480" style="margin: 0px 100px 0px 100px;">HTML5 Canvas not supported by browser.</canvas>
+                <form id="tofForm">
+                    Frequency (Hz): <input type="text" id="freq_textbox" value="1" size="1" style="margin-right: 30px;"> 
+                    Max Distance (mm): <input type="number" id="maxDist_number" max="4000" min="50" step="50" size="5" value="1500" style="margin-right: 10px;"> 
+                    <input class="button-red" type="button" id="tof_button" value="Set">
+                </form>
+            </figure>
+        </div>
+        <div class="side">
+            <figure>
+                <img class="block" src="images/VL53L5.png" alt="" width="200px">
+                <img class="block" src="images/flightSense.png" alt="" width="150px">
+            </figure>
+        </div>
+    </div>
+    <div class="row">
+        <div>
+            <!-- Toggle Button Style 2 -->
+            <div class="badge">Red LED</div>
+            <label class="toggler-wrapper style-2">
+              <input type="checkbox" id="greenLed" onclick="toggleLed()" checked>
+              <div class="toggler-slider">
+                <div class="toggler-knob"></div>
+              </div>
+            </label>
+            <!-- End Toggle Button Style 2 -->
+          </div>
+    </div>
+
+    
+    <script>
+        const baseHost = document.location.origin;
+        const streamUrl = baseHost + ":81";
+        const view = document.getElementById("stream");
+        const streamButton = document.getElementById("toggle_stream");
+
+        const startStream = () => 
+        {
+            view.src = streamUrl + "/stream.jpg";
+            streamButton.innerHTML = "Stop Stream";
+        }
+
+        const stopStream = () =>
+        {
+            window.stop();
+            streamButton.innerHTML = "Start Stream";
+        }
+
+        streamButton.onclick = () =>
+        {
+            const streamEnabled = streamButton.innerHTML === "Stop Stream";
+            if (streamEnabled)
+            {
+                stopStream();
+            }
+            else
+            {
+                startStream();
+            }
+            return false; // stop page from reloading
+        }
+
+        function toggleLed()
+        {
+            const led = document.getElementById("greenLed");
+            const xhr = new XMLHttpRequest();
+            if (led.checked)
+            {
+                xhr.open("POST", "/LedOn", true);
+                xhr.send();
+            }
+            else
+            {
+                xhr.open("POST", "/LedOff", true);
+                xhr.send();
+            }
+        }
+    </script>
+    <script>
+        const canvasSupport = () =>
+        {
+            return !!document.createElement("canvas").getContext;
+        }
+
+        const tofApp = () =>
+        {
+            if (!canvasSupport())
+            { 
+                return;
+            }
+
+            const theCanvas = document.getElementById("tof_canvas");
+            const ctx = theCanvas.getContext("2d");
+
+            const drawScreen = (data) =>
+            {
+                ctx.save();
+                ctx.scale(60, 60);
+                let color;
+                let idx;
+                for (var i = 0; i < 8; i++)
+                {
+                    for (var j = 0; j < 8; j++)
+                    {
+                        idx = (i * 8) + j;
+                        data[idx] = (data[idx] > maxDist ? maxDist : data[idx]);
+                        color = (data[idx] / maxDist) * 300;
+                        ctx.fillStyle = "hsl(" + color + ",100%,50%)";
+                        ctx.fillRect((7-j), i, 1, 1);
+                    }
+                }
+                ctx.restore();
+            }
+
+            const tofUpdateFreq = document.getElementById("freq_textbox");
+            const maxDistBox = document.getElementById("maxDist_number");
+            const SetToFParams = () =>
+            {
+                if (isNaN(tofUpdateFreq.value) || tofUpdateFreq.value <= 0)
+                {
+                    tofUpdateFreq.value = 1;
+                }
+                else if (tofUpdateFreq.value > 7)
+                {
+                    tofUpdateFreq.value = 7;
+                }
+                else if ((typeof tofTimeout == "undefined") || (tofUpdateInterval != (1000 / tofUpdateFreq.value)) )
+                {
+                    tofUpdateInterval = 1000 / tofUpdateFreq.value;
+
+                    // if the loop is ongoing, clear the timeout and restart
+                    if (typeof tofTimeout != "undefined")
+                    {
+                        clearTimeout(tofTimeout);
+                        getTofDataLoop();
+                    }
+                }
+             
+                maxDist = maxDistBox.value;
+            }
+
+            const getTofDataLoop = () =>
+            {
+                let xhr = new XMLHttpRequest();
+                xhr.onload = function()
+                {
+                    if (this.status == 200)
+                    {
+                        const tofData = new Uint16Array(xhr.response);
+                        drawScreen(tofData);
+                    }
+                    
+                    tofTimeout = setTimeout(getTofDataLoop, tofUpdateInterval);
+                }
+                xhr.responseType = "arraybuffer";
+                xhr.open("GET", "/tofData", true);
+                xhr.send();
+            }
+
+            document.getElementById("tof_button").onclick = SetToFParams;
+
+            SetToFParams();
+            getTofDataLoop();
+        }
+
+        tofApp();
+        
+
+    </script>
+</body>
+</html>
