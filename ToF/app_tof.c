@@ -109,7 +109,14 @@ UINT ToF_getRangingData(ToF_Data_t *results)
   results->len = distance.NumberOfZones;
   for (i = 0; i < results->len; i++)
   {
-    results->data[i] = distance.ZoneResult[i].Distance[0];
+    if (distance.ZoneResult[i].NumberOfTargets == 0)
+    {
+      results->data[i] = 4000;
+    }
+    else
+    {
+      results->data[i] = distance.ZoneResult[i].Distance[0];
+    }
   }
   HAL_GPIO_WritePin(DEBUG4_GPIO_Port, DEBUG4_Pin, GPIO_PIN_RESET);
 
